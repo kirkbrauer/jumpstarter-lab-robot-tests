@@ -1,0 +1,204 @@
+kind: Task
+apiVersion: tekton.dev/v1beta1
+metadata:
+  name: aib-builder-task
+spec:
+  params:
+    # job parameters
+    - name: job_id
+      description: "the reference used to track the job and access its assets"
+      type: string
+      default: ""
+    - name: component_id
+      description: "the component_id the job belongs to"
+      type: string
+      default: ""
+    # aib build parameters
+    - name: manifest-file
+      description: "manifest file to build"
+      type: string
+      default: "manifests/simple.aib.yml"
+    - name: distro
+      type: string
+      default: "autosd9"
+    - name: arch
+      type: string
+      default: "aarch64"
+    - name: target
+      type: string
+      default: "qemu"
+    - name: mode
+      type: string
+      default: "package"
+    - name: export_format
+      type: string
+      default: "qcow2"
+    - name: container-image
+      description: "aib container"
+      type: string
+      default: "quay.io/centos-sig-automotive/automotive-osbuild:latest"
+
+  results:
+    - description: Name of the image built
+      name: os-image-name
+      type: string
+
+  steps:
+    - name: aib-build
+      image: $(params.container-image)
+      resources:
+        requests:
+          memory: "12Gi"
+          cpu: "1500m"
+        limits:
+          memory: "12Gi"
+      script: |
+        #!/usr/bin/env bash
+
+        set -eux
+
+        OSBUILD_PATH="/usr/bin/osbuild"
+        STORE_PATH="/_build"
+        RUN_TMP_PATH="/run/osbuild/"
+
+        mkdir -p "$STORE_PATH"
+        mkdir -p "$RUN_TMP_PATH"
+
+        if mountpoint -q "$OSBUILD_PATH"; then
+            exit 0
+        fi
+
+        ROOT_TYPE="system_u:object_r:root_t:s0"
+        chcon "$ROOT_TYPE" "$STORE_PATH"
+
+        INSTALL_TYPE="system_u:object_r:install_exec_t:s0"
+        if ! mountpoint -q "$RUN_TMP_PATH"; then
+          mount -t tmpfs tmpfs "$RUN_TMP_PATH"
+        fi
+
+        DEST_PATH="$RUN_TMP_PATH/osbuild"
+        cp -p "$OSBUILD_PATH" "$DEST_PATH"
+        chcon "$INSTALL_TYPE" "$DEST_PATH"
+
+        mount --bind "$DEST_PATH" "$OSBUILD_PATH"
+
+        cd $(workspaces.source.path)
+
+        # podman credentials
+        if [[ "$(workspaces.dockerconfig.bound)" == "true" ]]; then
+
+          # if config.json exists at workspace root, we use that
+          if test -f "$(workspaces.dockerconfig.path)/config.json"; then
+            export DOCKER_CONFIG="$(workspaces.dockerconfig.path)"
+
+          # else we look for .dockerconfigjson at the root
+          elif test -f "$(workspaces.dockerconfig.path)/.dockerconfigjson"; then
+            cp "$(workspaces.dockerconfig.path)/.dockerconfigjson" "$HOME/.docker/config.json"
+            export DOCKER_CONFIG="$HOME/.docker"
+
+          # need to error out if neither files are present
+          else
+            echo "neither 'config.json' nor '.dockerconfigjson' found at workspace root"
+            exit 1
+          fi
+        fi
+
+        # build the image
+
+        MANIFEST_FILE=$(workspaces.source.path)/$(params.manifest-file)
+        
+        # Determine file extension
+        if [ "$(params.export_format)" = "image" ]; then
+          file_extension=".raw"
+        elif [ "$(params.export_format)" = "qcow2" ]; then
+          file_extension=".qcow2"
+        else
+          file_extension=".$(params.export_format)"
+        fi
+
+        CANONICAL_NAME=$(params.distro)-$(params.target)
+        EXPORT_FILE_NAME=${CANONICAL_NAME}${file_extension}
+
+        MODE_PARAM=""
+        if [ -n "$(params.mode)" ]; then
+          MODE_PARAM="--mode $(params.mode)"
+        fi
+
+        CUSTOM_DEFS=""
+        CUSTOM_DEFS_FILE="$(workspaces.source.path)/manifests/custom-definitions.env"
+        if [ -f "$CUSTOM_DEFS_FILE" ]; then
+          echo "Processing custom definitions from $CUSTOM_DEFS_FILE"
+          while read -r line || [[ -n "$line" ]]; do
+            for def in $line; do
+              CUSTOM_DEFS+=" --define $def"
+            done
+          done < "$CUSTOM_DEFS_FILE"
+        else
+          echo "No custom-definitions.env file found"
+        fi
+
+        OSBUILD_CMD="automotive-image-builder --verbose build \
+          $CUSTOM_DEFS \
+          --distro $(params.distro) --target $(params.target) --arch=$(params.arch) \
+          --build-dir=/_build \
+          --export $(params.export_format) \
+          --osbuild-manifest=/output/build.json \
+          $MODE_PARAM \
+          $MANIFEST_FILE \
+          /output/${EXPORT_FILE_NAME}"
+
+        echo "Running the build command: $OSBUILD_CMD"
+        $OSBUILD_CMD
+
+        pushd /output
+        ln -sf ./${EXPORT_FILE_NAME} ./disk.img
+
+        # copying build artifacts to shared workspace...
+
+        mkdir -p $(workspaces.source.path)/binaries
+        
+        cp -v /output/${EXPORT_FILE_NAME} $(workspaces.source.path)/binaries/ || echo "Failed to copy ${EXPORT_FILE_NAME}"
+
+        cp -vL /output/disk.img $(workspaces.source.path)/binaries/${CANONICAL_NAME}${file_extension} || echo "Failed to copy disk.img"
+
+        pushd $(workspaces.source.path)
+        ln -sf ${EXPORT_FILE_NAME} disk.img
+        popd
+
+        cp -v /output/build.json $(workspaces.source.path)/binaries/build.json || echo "Failed to copy build.json"
+
+        echo -n "$EXPORT_FILE_NAME" > $(results.os-image-name.path)
+
+      securityContext:
+        capabilities: {}
+        privileged: true
+        seLinuxOptions:
+          type: unconfined_t
+      volumeMounts:
+        - mountPath: /_build
+          name: build-dir
+        - mountPath: /output
+          name: output-dir
+        - mountPath: /run/osbuild
+          name: run-dir
+        - mountPath: /dev
+          name: dev
+  
+  volumes:
+    - emptyDir:
+        medium: Memory
+        sizeLimit: 10Gi
+      name: build-dir
+    - emptyDir: {}
+      name: output-dir
+    - emptyDir: {}
+      name: run-dir
+    - hostPath:
+        path: /dev
+      name: dev
+
+  workspaces:
+    - name: source
+    - name: dockerconfig
+      description: Includes a docker `config.json`
+      optional: true

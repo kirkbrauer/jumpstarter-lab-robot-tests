@@ -1,0 +1,21 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: deploy
+spec:
+  params:
+    - description: The component id
+      name: COMPONENT_ID
+      type: string
+    - description: The namespace the component is deployed in
+      name: NAMESPACE
+      type: string
+  steps:
+    - name: deploy
+      image: 'registry.redhat.io/openshift4/ose-cli:v4.15'
+      script: |
+        #!/usr/bin/env bash
+
+        oc delete pod -n $(params.NAMESPACE) -l backstage.io/kubernetes-id=$(params.COMPONENT_ID)
+
+      resources: {}

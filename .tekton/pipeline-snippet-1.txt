@@ -1,0 +1,59 @@
+#
+# THIS IS YAML. BE AWARE OF TABS/INDENTS !!!
+#
+      - name: prepare-build
+        params:
+          - name: build-stage
+            value: $(params.build-stage)
+        taskRef:
+          kind: Task
+          name: parse-aib-ci
+        runAfter:
+          - fetch-repository
+        workspaces:
+          - name: source
+            workspace: source-folder
+
+      - name: automotive-image-builder
+        params:
+          - name: manifest-file
+            value: $(tasks.prepare-build.results.manifest-file)
+          - name: distro
+            value: $(tasks.prepare-build.results.distro)
+          - name: arch
+            value: $(tasks.prepare-build.results.arch)
+          - name: target
+            value: $(tasks.prepare-build.results.target)
+          - name: mode
+            value: $(tasks.prepare-build.results.mode)
+          - name: export_format
+            value: $(tasks.prepare-build.results.export_format)
+
+        taskRef:
+          kind: Task
+          name: aib-builder-task
+        runAfter:
+          - prepare-build
+          - tag-container
+        workspaces:
+          - name: source
+            workspace: source-folder
+          - name: dockerconfig
+            workspace: docker-config
+
+      - name: s3-upload
+        params:
+          - name: job_id
+            value: $(params.revision)
+          - name: bucket_folder
+            value: user28-jumpstarter-lab
+          - name: os_image_name
+            value: $(tasks.automotive-image-builder.results.os-image-name)
+        runAfter:
+          - automotive-image-builder
+        taskRef:
+          kind: Task
+          name: s3-upload-task
+        workspaces:
+          - name: source
+            workspace: source-folder

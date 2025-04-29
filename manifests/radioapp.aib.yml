@@ -1,0 +1,49 @@
+# This is a simpler example showing
+# - how to add custom rpms and containers
+# - how to set the root password
+
+name: user28-jumpstarter-lab
+
+image:
+  selinux_mode: permissive
+
+content:
+  repos:
+    - id: epel
+      baseurl: https://dl.fedoraproject.org/pub/epel/9/Everything/$arch/
+
+  rpms:
+    - cloud-init
+    - podman
+    - containernetworking-plugins
+    - vsomeip3-routingmanager
+    - dlt-daemon
+    - openssh-server
+    - openssh-clients
+    - vim
+
+  container_images:
+    - source: quay-msttj.apps.cluster-msttj.msttj.sandbox4574.opentlc.com/quayadmin/user28-jumpstarter-lab # templated in backstage
+      tag: latest
+      name: localhost/app
+
+  add_files:
+    - path: /etc/containers/systemd/radio.container
+      source_path: ../src/radio.container
+    - path: /usr/local/bin/radio-client
+      source_path: ../src/radio-client-wrapper
+
+  chmod_files:
+    - path: /usr/local/bin/radio-client
+      mode: "0555"
+
+  systemd:
+    enabled_services:
+      # Enable ssh daemon
+      - sshd.service
+      # Enable the dlt daemon
+      - dlt
+
+auth:
+  # "password"
+  root_password: $6$xoLqEUz0cGGJRx01$H3H/bFm0myJPULNMtbSsOFd/2BnHqHkMD92Sfxd.EKM9hXTWSmELG8cf205l6dktomuTcgKGGtGDgtvHVXSWU.

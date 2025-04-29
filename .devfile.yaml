@@ -1,0 +1,101 @@
+schemaVersion: 2.3.0
+metadata:
+  name: jumpstarter-lab-autosd-app
+  tags:
+    - automotive
+    - rhivos
+    - jumpstarter
+components:
+  - name: runtime
+    container:
+      image: quay.io/jumpstarter-dev/summit-devspace:main
+      memoryLimit: "4Gi"
+      memoryRequest: "1Gi"
+      cpuLimit: "4"
+      cpuRequest: "1"
+      mountSources: true
+      env:
+        - name: JUMPSTARTER_GRPC_INSECURE
+          value: "1"
+        - name: DEFAULT_EXTENSIONS
+          value: "/checode/default-extensions/1.vsix;/checode/default-extensions/2.vsix;/checode/default-extensions/4.vsix;/checode/default-extensions/5.vsix"
+      volumeMounts:
+        - name: run-vsomeip
+          path: /run/vsomeip
+        - name: run-dlt
+          path: /run/dlt
+      endpoints:
+        - name: "port9000"
+          exposure: none
+          targetPort: 9000
+        - name: "port9001"
+          exposure: none
+          targetPort: 9001
+        - name: "port9002"
+          exposure: none
+          targetPort: 9002
+        - name: "port9003"
+          exposure: none
+          targetPort: 9003
+        - name: "port9004"
+          exposure: none
+          targetPort: 9004
+        - name: "port9005"
+          exposure: none
+          targetPort: 9005
+  - name: routingmanagerd
+    container:
+      image: quay.io/jumpstarter-dev/summit-devspace:main
+      command:
+        - routingmanagerd
+      volumeMounts:
+        - name: run-vsomeip
+          path: /run/vsomeip
+  - name: dlt-daemon
+    container:
+      image: quay.io/jumpstarter-dev/summit-devspace:main
+      command:
+        - dlt-daemon
+      volumeMounts:
+        - name: run-dlt
+          path: /run/dlt
+  - name: run-vsomeip
+    volume:
+      ephemeral: true
+      size: 16Mi
+  - name: run-dlt
+    volume:
+      ephemeral: true
+      size: 16Mi
+commands:
+  - id: configure-jumpstarter-client
+    exec:
+      component: runtime
+      commandLine: |
+        # create jumpstarter client config directories
+        mkdir -p ~/.config/jumpstarter/clients/
+
+        # generate jumpstarter user config
+        cat > ~/.config/jumpstarter/config.yaml <<EOF
+        apiVersion: jumpstarter.dev/v1alpha1
+        kind: UserConfig
+        config:
+          current-client: lab
+        EOF
+
+        # generate jumpstarter client config
+        cat > ~/.config/jumpstarter/clients/lab.yaml <<EOF
+        apiVersion: jumpstarter.dev/v1alpha1
+        kind: ClientConfig
+        metadata:
+          namespace: jumpstarter-qemu-exporter
+          name: $(sed "s|-devspaces||" /run/secrets/kubernetes.io/serviceaccount/namespace)
+        endpoint: jumpstarter-grpc.jumpstarter-lab.svc.cluster.local:8082
+        token: $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)
+        drivers:
+          allow: []
+          unsafe: True
+        EOF
+events:
+  postStart:
+    - configure-jumpstarter-client

@@ -1,0 +1,30 @@
+# Each .aib-ci.yml file needs at minimum a 'default' section
+
+default:
+  # the name of the artifact
+  name: user28-jumpstarter-lab
+  
+  # how to build the artifact
+  manifest: manifests/radioapp.aib.yml 
+
+  # list of parameters for the automotive-image-builder
+  spec:
+    distro: autosd9  # autosd cs9
+    arch: aarch64 # aarch64 x86_64
+    target: qemu # rpi4 qemu
+    mode: package # package image
+    export_format: qcow2 # image qcow2 container
+
+# Other targets can be added Possible values are: test, release. 
+# These values are used in the various pipelines, to match the specified 'build-stage' values.
+
+test:
+  # Used in the 'pr-build-test' pipeline. Values in this section override the default values above
+  spec:
+    target: qemu
+    
+release:
+  # Used in the 'pr-build-release' pipeline. Values in this section override the default values above
+  spec:
+    target: qemu # rpi4
+    

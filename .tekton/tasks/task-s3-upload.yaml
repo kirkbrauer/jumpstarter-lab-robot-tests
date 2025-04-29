@@ -1,0 +1,82 @@
+kind: Task
+apiVersion: tekton.dev/v1beta1
+metadata:
+  name: s3-upload-task
+spec:
+  params:
+    # job parameters
+    - name: job_id
+      description: "The reference used to track the job and access its assets"
+      type: string
+      default: ""
+    - name: os_image_name
+      description: "The name of the image"
+      type: string
+      default: ""
+    # s3 parameters
+    - name: bucket_name
+      description: "The S3 bucket name"
+      type: string
+      default: "rhadp-aib-cdn"
+    - name: bucket_folder
+      description: "The location within the bucket to store the assets"
+      type: string
+      default: ""
+    # secrets
+    - name: aws-secrets-ref
+      description: "Secret with the access key and secret key"
+      type: string
+      default: "aws-credentials"
+    # scripts configuration
+    - name: script
+      description: "Script to be executed"
+      type: string
+      default: "s3-upload.py"
+    - name: scripts-location
+      description: "Location of the script, relative to the source directory"
+      type: string
+      default: "scripts"
+
+  results:
+    - description: Download URL of the uploaded image
+      name: url
+      type: string
+
+  steps:
+    - name: s3-upload
+      image: registry.access.redhat.com/ubi9/python-312:9.5
+      env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              key: aws_access_key_id
+              name: $(params.aws-secrets-ref)
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              key: aws_secret_access_key
+              name: $(params.aws-secrets-ref)
+        - name: AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              key: aws_default_region
+              name: $(params.aws-secrets-ref)
+
+      script: |
+        #!/usr/bin/env bash
+
+        set -eux
+
+        REQUIREMENTS_FILE="$(workspaces.source.path)/scripts/requirements.txt"
+        if [ -f "$REQUIREMENTS_FILE" ]; then
+          pip install -r "$REQUIREMENTS_FILE"
+        fi
+
+        # run the script
+        python "$(workspaces.source.path)/$(params.scripts-location)/$(params.script)" \
+          $(workspaces.source.path)/binaries/$(params.os_image_name) \
+          -b $(params.bucket_name) \
+          -d $(params.bucket_folder)/$(params.job_id)_$(params.os_image_name) > $(results.url.path)
+
+  workspaces:
+    - name: source

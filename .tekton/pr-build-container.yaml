@@ -1,0 +1,152 @@
+---
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  name: build-container
+  labels:
+    backstage.io/kubernetes-id: user28-jumpstarter-lab
+    type: pipeline
+  annotations:
+    # The event we are targeting as seen from the webhook payload
+    # this can be an array too, i.e: [pull_request, push]
+    pipelinesascode.tekton.dev/on-event: "[push]"
+
+    # The branch or tag we are targeting (ie: main, refs/tags/*)
+    pipelinesascode.tekton.dev/on-target-branch: "[develop]"
+
+    # Fetch the git-clone task from hub, we are able to reference later on it
+    # with taskRef and it will automatically be embedded into our pipeline.
+    pipelinesascode.tekton.dev/task: "[git-clone]"
+    pipelinesascode.tekton.dev/task-1: ".tekton/tasks/jumpstarter-get-lease.yaml"
+    pipelinesascode.tekton.dev/task-2: ".tekton/tasks/jumpstarter-run-command.yaml"
+    pipelinesascode.tekton.dev/task-3: ".tekton/tasks/jumpstarter-release-lease.yaml"
+    pipelinesascode.tekton.dev/task-4: ".tekton/tasks/jumpstarter-setup-sa-client.yaml"
+    pipelinesascode.tekton.dev/task-5: ".tekton/tasks/download.yaml"
+    pipelinesascode.tekton.dev/task-6: ".tekton/tasks/task-parse-aib-ci.yaml"
+    pipelinesascode.tekton.dev/task-7: ".tekton/tasks/task-aib-builder.yaml"
+    pipelinesascode.tekton.dev/task-8: ".tekton/tasks/task-deploy.yaml"
+    pipelinesascode.tekton.dev/task-9: ".tekton/tasks/task-s3-upload.yaml"
+
+    # How many runs we want to keep.
+    pipelinesascode.tekton.dev/max-keep-runs: "5"
+spec:
+  params:
+    # The variable with brackets are special to Pipelines as Code
+    # They will automatically be expanded with the events from Github.
+    - name: repo_url
+      value: "{{ repo_url }}"
+    - name: revision
+      value: "{{ revision }}"
+    - name: component-id
+      value: jumpstarter-lab
+    - name: build-stage
+      value: "default"
+
+  podTemplate:
+    nodeSelector:
+      kubernetes.io/arch: arm64
+    tolerations:
+      - key: "architecture"
+        operator: "Equal"
+        value: "arm"
+        effect: "NoSchedule"
+
+  pipelineSpec:
+    params:
+      - name: repo_url
+      - name: revision
+    workspaces:
+      - name: source-folder
+      - name: basic-auth
+
+    tasks:
+      
+      #
+      # Container build specific steps
+      #
+      
+      - name: fetch-repository
+        taskRef:
+          name: git-clone
+          kind: ClusterTask
+        workspaces:
+          - name: output
+            workspace: source-folder
+          - name: basic-auth
+            workspace: basic-auth
+        params:
+          - name: url
+            value: $(params.repo_url)
+          - name: revision
+            value: $(params.revision)
+
+      - name: build-container
+        params:
+          - name: IMAGE
+            value: quay-msttj.apps.cluster-msttj.msttj.sandbox4574.opentlc.com/quayadmin/user28-jumpstarter-lab:$(params.revision) # templated in backstage
+          - name: CONTEXT
+            value: ./src
+          - name: DOCKERFILE
+            value: ./src/Containerfile
+          - name: BUILD_EXTRA_ARGS
+            value: "--platform=linux/arm64"
+        runAfter:
+          - fetch-repository
+        taskRef:
+          kind: Task
+          name: buildah
+        workspaces:
+          - name: source
+            workspace: source-folder
+          - name: dockerconfig
+            workspace: docker-config
+
+      - name: tag-container
+        params:
+          - name: source-image-tag
+            value: quay-msttj.apps.cluster-msttj.msttj.sandbox4574.opentlc.com/quayadmin/user28-jumpstarter-lab:$(params.revision) # templated in backstage
+          - name: target-image-tag
+            value: quay-msttj.apps.cluster-msttj.msttj.sandbox4574.opentlc.com/quayadmin/user28-jumpstarter-lab:latest # templated in backstage
+        runAfter:
+          - build-container
+        taskRef:
+          kind: Task
+          name: tag-image
+        workspaces:
+          - name: dockerconfig
+            workspace: docker-config
+
+      - name: deploy-container
+        params:
+          - name: COMPONENT_ID
+            value: $(params.component-id)
+          - name: NAMESPACE
+            value: user28-jumpstarter-lab-dev
+        runAfter:
+          - tag-container
+        taskRef:
+          kind: Task
+          name: deploy
+
+  #
+  # Workspace definitions
+  #
+  workspaces:
+    - name: source-folder
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3-csi
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 10Gi
+    # This workspace will inject secret to help the git-clone task to be able to
+    # checkout the private repositories
+    - name: basic-auth
+      secret:
+        secretName: "{{ git_auth_secret }}"
+
+    - name: docker-config
+      secret:
+        secretName: user28-jumpstarter-lab-registry-creds # templated in backstage

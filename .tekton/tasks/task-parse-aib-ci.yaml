@@ -1,0 +1,64 @@
+kind: Task
+apiVersion: tekton.dev/v1beta1
+metadata:
+  name: parse-aib-ci
+spec:
+  params:
+    - name: build-stage
+      description: Stage of the build process
+      type: string
+      default: "default"
+    - name: aib-ci-file
+      description: aib-ci file to parse
+      type: string
+      default: ".aib-ci.yml"
+    # scripts configuration
+    - name: script
+      description: "Script to be executed"
+      type: string
+      default: "parse-aib.py"
+    - name: scripts-location
+      description: "Location of the script, relative to the source directory"
+      type: string
+      default: "scripts"
+  
+  results:
+    - name: manifest-file
+      type: string
+    - name: distro
+      type: string
+    - name: arch
+      type: string
+    - name: target
+      type: string
+    - name: mode
+      type: string
+    - name: export_format
+      type: string
+
+  steps:
+    - name: parse-aib-ci
+      image: registry.access.redhat.com/ubi9/python-312:9.5 
+      
+      script: |
+        #!/usr/bin/env bash
+
+        set -eux
+
+        REQUIREMENTS_FILE="$(workspaces.source.path)/scripts/requirements.txt"
+        if [ -f "$REQUIREMENTS_FILE" ]; then
+          pip install -r "$REQUIREMENTS_FILE"
+        fi
+
+        AIB_CI_FILE="$(workspaces.source.path)/$(params.aib-ci-file)"
+        
+        # extract the values
+        python "$(workspaces.source.path)/$(params.scripts-location)/$(params.script)" $AIB_CI_FILE "$(params.build-stage).manifest" > $(results.manifest-file.path)
+        python "$(workspaces.source.path)/$(params.scripts-location)/$(params.script)" $AIB_CI_FILE "$(params.build-stage).spec.distro" > $(results.distro.path)
+        python "$(workspaces.source.path)/$(params.scripts-location)/$(params.script)" $AIB_CI_FILE "$(params.build-stage).spec.arch" > $(results.arch.path)
+        python "$(workspaces.source.path)/$(params.scripts-location)/$(params.script)" $AIB_CI_FILE "$(params.build-stage).spec.target" > $(results.target.path)
+        python "$(workspaces.source.path)/$(params.scripts-location)/$(params.script)" $AIB_CI_FILE "$(params.build-stage).spec.mode" > $(results.mode.path)
+        python "$(workspaces.source.path)/$(params.scripts-location)/$(params.script)" $AIB_CI_FILE "$(params.build-stage).spec.export_format" > $(results.export_format.path)
+
+  workspaces:
+    - name: source

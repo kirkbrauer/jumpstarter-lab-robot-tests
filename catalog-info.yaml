@@ -1,0 +1,28 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: user28-jumpstarter-lab
+  description: "LB2255 - Jumpstarter: An open source framework for hardware-in-the-loop testing in modern DevSecOps pipelines"
+  annotations:
+    argocd/app-selector: rht-gitops.com/janus-argocd=user28-jumpstarter-lab-bootstrap
+    backstage.io/kubernetes-id: user28-jumpstarter-lab
+    janus-idp.io/tekton: user28-jumpstarter-lab
+    backstage.io/source-location: url:https://gitlab-gitlab.apps.cluster-msttj.msttj.sandbox4574.opentlc.com/user28/jumpstarter-lab
+    backstage.io/techdocs-ref: url:https://gitlab-gitlab.apps.cluster-msttj.msttj.sandbox4574.opentlc.com/user28/jumpstarter-lab
+    gitlab.com/project-slug: user28/jumpstarter-lab
+    quay.io/repository-slug: quayadmin/user28-jumpstarter-lab
+  tags:
+    - automotive
+    - autosd
+    - jumpstarter
+    - cpp
+  links:
+    - url: https://devspaces.apps.cluster-msttj.msttj.sandbox4574.opentlc.com/#https://gitlab-gitlab.apps.cluster-msttj.msttj.sandbox4574.opentlc.com/user28/jumpstarter-lab
+      title: "DevSpace jumpstarter-lab"
+    - url: https://devspaces.apps.cluster-msttj.msttj.sandbox4574.opentlc.com
+      title: OpenShift Dev Spaces Workspaces
+      
+spec:
+  type: application
+  lifecycle: development
+  owner: User:user28

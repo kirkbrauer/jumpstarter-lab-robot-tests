@@ -1,0 +1,91 @@
+#
+# THIS IS YAML. BE AWARE OF TABS/INDENTS !!!
+#
+
+      - name: prepare-jumpstarter-config
+        taskRef:
+          name: jumpstarter-setup-sa-client
+          kind: Task
+        runAfter:
+          - fetch-repository
+        params:
+          - name: endpoint
+            value: jumpstarter-grpc.jumpstarter-lab.svc.cluster.local:8082 # templated in backstage
+          - name: namespace
+            value: jumpstarter-qemu-exporter
+          - name: name
+            value: user28-jumpstarter-lab-build # templated in backstage
+          - name: insecure-tls
+            value: "true"
+        workspaces:
+          - name: config-dir
+            workspace: source-folder
+            subPath: .jumpstarter
+
+      - name: create-jumpstarter-lease
+        params:
+          - name: exporter-labels
+            value:
+              - type=virtual
+          - name: lease-duration
+            value: "00:15:00" # bump this
+          - name: config
+            value: "$(tasks.prepare-jumpstarter-config.results.config)"
+
+        taskRef:
+          kind: Task
+          name: jumpstarter-get-lease
+        runAfter:
+          - prepare-jumpstarter-config
+          - automotive-image-builder
+
+      - name: flash-with-jumpstarter
+        params:
+          - name: jmp-lease-id
+            value: $(tasks.create-jumpstarter-lease.results.jmp-lease-id)
+          - name: jmp-jScript
+            value: j flasher flash binaries/$(tasks.automotive-image-builder.results.os-image-name)
+          - name: config
+            value: "$(tasks.prepare-jumpstarter-config.results.config)"
+
+        taskRef:
+          kind: Task
+          name: jumpstarter-run-command
+        runAfter:
+          - create-jumpstarter-lease
+        workspaces:
+          - name: source
+            workspace: source-folder
+
+      - name: test-with-jumpstarter
+        params:
+          - name: jmp-lease-id
+            value: $(tasks.create-jumpstarter-lease.results.jmp-lease-id)
+          - name: jmp-jScript
+            value: pytest
+          - name: config
+            value: "$(tasks.prepare-jumpstarter-config.results.config)"
+
+        taskRef:
+          kind: Task
+          name: jumpstarter-run-command
+        runAfter:
+          - flash-with-jumpstarter
+        workspaces:
+          - name: source
+            workspace: source-folder
+    #
+    # Final tasks to release resources and clean up
+    #
+    finally:
+      # always try to release a lease if something goes wrong
+      - name: release
+        params:
+          - name: jmp-lease-id
+            value: $(tasks.create-jumpstarter-lease.results.jmp-lease-id)
+          - name: config
+            value: "$(tasks.prepare-jumpstarter-config.results.config)"
+
+        taskRef:
+          kind: Task
+          name: jumpstarter-release-lease

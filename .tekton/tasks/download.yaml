@@ -1,0 +1,29 @@
+kind: Task
+apiVersion: tekton.dev/v1beta1
+metadata:
+  name: download
+spec:
+  description: |
+     Download an asset from the internet.
+  params:
+    - name: url
+      description: "URL to download"
+      type: string
+
+    - name: file
+      description: "File output"
+      type: string
+
+  steps:
+    - name: download
+      image: quay.io/fedora/fedora-minimal:43
+      script: |
+        #!/usr/bin/env bash
+
+        OUTPUT_DIR="$(workspaces.output-dir.path)"
+        OUTPUT_FILE=$(params.file)
+        curl -L -o "${OUTPUT_DIR}/${OUTPUT_FILE}" "$(params.url)"
+
+  workspaces:
+    - name: output-dir
+      description: The workspace where the file will be downloaded
