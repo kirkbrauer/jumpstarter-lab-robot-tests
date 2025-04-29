@@ -20,7 +20,6 @@ class JumpstarterLibrary:
         try:
             self._client = self._stack.enter_context(env())
         except RuntimeError:
-            selector = getattr(self, "selector", None)
             config = ClientConfigV1Alpha1.load(alias=client)
             self._lease = self._stack.enter_context(config.lease(selector=selector))
             self._client = self._stack.enter_context(self._lease.connect())
