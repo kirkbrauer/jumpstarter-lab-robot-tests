@@ -1,31 +1,16 @@
-*** Variables ***
-${SELECTOR}    "type=virtual"
-${CLIENT}    "lab"
-${USERNAME}    "root"
-${PASSWORD}    "password"
-
 *** Settings ***
-Library           JumpstarterLibrary.py
-Suite Setup       Request Lease    selector=${SELECTOR}    client=${CLIENT}
-Suite Teardown    Release Lease
+Library             JumpstarterLibrary.py
 
-*** Keywords ***
-Expect Prompt
-    [Documentation]    Expect the empty root prompt.
-    Console Expect    ]#
+Suite Setup         Request Lease    selector=${SELECTOR}    client=${CLIENT}
+Suite Teardown      Release Lease
 
-Login As Root
-    [Documentation]    Login as the root user.
-    Console Expect    login:    timeout=120
-    Console Send    ${USERNAME}
-    Console Expect    Password:    timeout=10
-    Console Send    ${PASSWORD}
-    Console Expect    ]#
 
-Run Radio Client
-    [Documentation]    Run the radio-client with Podman.
-    Console Send    podman exec -i systemd-radio radio-client
-    Console Expect    Connecting to radio service
+*** Variables ***
+${SELECTOR}     "type=virtual"
+${CLIENT}       "lab"
+${USERNAME}     "root"
+${PASSWORD}     "password"
+
 
 *** Test Cases ***
 Test Boot Process
@@ -71,3 +56,22 @@ Test RH Summit Radio
     Console Expect    Station: Red Hat Summit Radio
     Console Send    q
     Expect Prompt
+
+
+*** Keywords ***
+Expect Prompt
+    [Documentation]    Expect the empty root prompt.
+    Console Expect    ]#
+
+Login As Root
+    [Documentation]    Login as the root user.
+    Console Expect    login:    timeout=120
+    Console Send    ${USERNAME}
+    Console Expect    Password:    timeout=10
+    Console Send    ${PASSWORD}
+    Console Expect    ]#
+
+Run Radio Client
+    [Documentation]    Run the radio-client with Podman.
+    Console Send    podman exec -i systemd-radio radio-client
+    Console Expect    Connecting to radio service

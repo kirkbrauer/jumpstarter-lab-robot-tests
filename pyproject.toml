@@ -11,3 +11,8 @@ dependencies = [
 
 [tool.uv.sources]
 jumpstarter-all = { git = "https://github.com/jumpstarter-dev/jumpstarter", subdirectory = "packages/jumpstarter-all" }
+
+[dependency-groups]
+dev = [
+    "robotframework-tidy>=4.16.0",
+]
