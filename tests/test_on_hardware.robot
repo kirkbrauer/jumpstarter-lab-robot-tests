@@ -1,15 +1,10 @@
 *** Settings ***
-Library             JumpstarterLibrary.py
+Documentation       A simple Jumpstarter test suite using the Robot Framework.
 
-Suite Setup         Request Lease    selector=${SELECTOR}    client=${CLIENT}
-Suite Teardown      Release Lease
+Resource            keywords.resource
 
-
-*** Variables ***
-${SELECTOR}     "type=virtual"
-${CLIENT}       "lab"
-${USERNAME}     "root"
-${PASSWORD}     "password"
+Suite Setup         Connect Jumpstarter
+Suite Teardown      Cleanup Jumpstarter
 
 
 *** Test Cases ***
@@ -22,14 +17,14 @@ Test Uname
     [Documentation]    Verify `uname -a` runs successfully.
     Console Send    uname -a
     Expect Prompt
-    ${output}=    Console Get Output
+    ${output}=    Console Output
     Log    ${output}
 
 Test Podman Images
     [Documentation]    Verify expected image appears in `podman images` list.
     Console Send    podman images
     Expect Prompt
-    ${output}=    Console Get Output
+    ${output}=    Console Output
     Should Contain    ${output}    localhost/app
 
 Test Radio Service
@@ -56,22 +51,3 @@ Test RH Summit Radio
     Console Expect    Station: Red Hat Summit Radio
     Console Send    q
     Expect Prompt
-
-
-*** Keywords ***
-Expect Prompt
-    [Documentation]    Expect the empty root prompt.
-    Console Expect    ]#
-
-Login As Root
-    [Documentation]    Login as the root user.
-    Console Expect    login:    timeout=120
-    Console Send    ${USERNAME}
-    Console Expect    Password:    timeout=10
-    Console Send    ${PASSWORD}
-    Console Expect    ]#
-
-Run Radio Client
-    [Documentation]    Run the radio-client with Podman.
-    Console Send    podman exec -i systemd-radio radio-client
-    Console Expect    Connecting to radio service

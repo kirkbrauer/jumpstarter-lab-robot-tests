@@ -33,6 +33,10 @@ class JumpstarterLibrary:
         # Re-create the console after power cycle
         self._console = self._stack.enter_context(self._client.console.pexpect())
 
+    def power_off(self):
+        self._client.power.off()
+        self._console = None
+
     def console_send(self, send_text, times=1):
         if self._console is None:
             raise Error("Console not available")
@@ -43,7 +47,10 @@ class JumpstarterLibrary:
             raise Error("Console not available")
         self._console.expect_exact(expect_text, timeout=timeout)
 
-    def console_get_output(self):
+    def console_output(self):
         if self._console is None:
             raise Error("Console not available")
         return self._console.before.decode()
+
+    def flash_image(self, path):
+        self._client.flasher.flash(path=path)
